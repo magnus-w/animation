@@ -1,0 +1,23 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f0f0f0;
+}
+
+.letter {
+    font-family: 'Courier', monospace;
+    font-size: 160px;
+    color: darkgray;
+    transition: transform 2s, opacity 2s, color 2s;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.rotating {
+    animation: rotate 5s linear infinite;
+}
