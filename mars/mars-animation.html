@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mars 3D Line Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: transparent;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background: transparent;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="marsCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('marsCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Configuration
+        const config = {
+            radius: Math.min(canvas.width, canvas.height) * 0.3,
+            centerX: canvas.width / 2,
+            centerY: canvas.height / 2,
+            rotationSpeed: 0.003,
+            latitudeLines: 20,
+            longitudeLines: 24,
+            shadingDensity: 300, // Number of impressionistic shading lines
+        };
+
+        // Mars color palette
+        const colors = {
+            light: ['#FF6B35', '#FF8C42', '#FFA552', '#FFB366'], // Orange/light red
+            medium: ['#C44536', '#D4573B', '#E06940', '#B43D2F'], // Medium red
+            dark: ['#8B2E1F', '#6B1F14', '#4A1410', '#2C0D0A'], // Dark red/black
+            shadow: ['#1A0806', '#0D0403', '#000000'] // Deep shadow
+        };
+
+        // 3D Point class
+        class Point3D {
+            constructor(x, y, z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.rotatedX = x;
+                this.rotatedY = y;
+                this.rotatedZ = z;
+                this.projected2DX = 0;
+                this.projected2DY = 0;
+            }
+        }
+
+        // Line class
+        class Line {
+            constructor(point1, point2, color, width) {
+                this.point1 = point1;
+                this.point2 = point2;
+                this.color = color;
+                this.width = width;
+            }
+        }
+
+        // Create sphere points
+        function createSpherePoints() {
+            const points = [];
+
+            // Create latitude and longitude grid points
+            for (let lat = 0; lat <= config.latitudeLines; lat++) {
+                const theta = (lat * Math.PI) / config.latitudeLines;
+                for (let lon = 0; lon <= config.longitudeLines; lon++) {
+                    const phi = (lon * 2 * Math.PI) / config.longitudeLines;
+
+                    const x = config.radius * Math.sin(theta) * Math.cos(phi);
+                    const y = config.radius * Math.cos(theta);
+                    const z = config.radius * Math.sin(theta) * Math.sin(phi);
+
+                    points.push(new Point3D(x, y, z));
+                }
+            }
+
+            return points;
+        }
+
+        // Create structural lines (latitude and longitude)
+        function createStructuralLines(points) {
+            const lines = [];
+
+            // Latitude lines
+            for (let lat = 0; lat <= config.latitudeLines; lat++) {
+                for (let lon = 0; lon < config.longitudeLines; lon++) {
+                    const index = lat * (config.longitudeLines + 1) + lon;
+                    const nextIndex = lat * (config.longitudeLines + 1) + lon + 1;
+                    lines.push(new Line(points[index], points[nextIndex]));
+                }
+            }
+
+            // Longitude lines
+            for (let lon = 0; lon <= config.longitudeLines; lon++) {
+                for (let lat = 0; lat < config.latitudeLines; lat++) {
+                    const index = lat * (config.longitudeLines + 1) + lon;
+                    const nextIndex = (lat + 1) * (config.longitudeLines + 1) + lon;
+                    lines.push(new Line(points[index], points[nextIndex]));
+                }
+            }
+
+            return lines;
+        }
+
+        // Create impressionistic shading lines
+        function createShadingLines() {
+            const lines = [];
+
+            for (let i = 0; i < config.shadingDensity; i++) {
+                // Random points on sphere surface
+                const theta1 = Math.random() * Math.PI;
+                const phi1 = Math.random() * 2 * Math.PI;
+                const theta2 = theta1 + (Math.random() - 0.5) * 0.5; // Nearby point
+                const phi2 = phi1 + (Math.random() - 0.5) * 0.5;
+
+                const x1 = config.radius * Math.sin(theta1) * Math.cos(phi1);
+                const y1 = config.radius * Math.cos(theta1);
+                const z1 = config.radius * Math.sin(theta1) * Math.sin(phi1);
+
+                const x2 = config.radius * Math.sin(theta2) * Math.cos(phi2);
+                const y2 = config.radius * Math.cos(theta2);
+                const z2 = config.radius * Math.sin(theta2) * Math.sin(phi2);
+
+                lines.push(new Line(new Point3D(x1, y1, z1), new Point3D(x2, y2, z2)));
+            }
+
+            return lines;
+        }
+
+        // Initialize geometry
+        const spherePoints = createSpherePoints();
+        const structuralLines = createStructuralLines(spherePoints);
+        const shadingLines = createShadingLines();
+        const allLines = [...structuralLines, ...shadingLines];
+
+        // Rotation angles
+        let angleX = 0;
+        let angleY = 0;
+        let angleZ = 0;
+
+        // Rotation matrix functions
+        function rotateX(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const y = point.y * cos - point.z * sin;
+            const z = point.y * sin + point.z * cos;
+            return { x: point.x, y, z };
+        }
+
+        function rotateY(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const x = point.x * cos + point.z * sin;
+            const z = -point.x * sin + point.z * cos;
+            return { x, y: point.y, z };
+        }
+
+        function rotateZ(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const x = point.x * cos - point.y * sin;
+            const y = point.x * sin + point.y * cos;
+            return { x, y, z: point.z };
+        }
+
+        // Project 3D point to 2D
+        function project3D(point) {
+            const perspective = 800;
+            const scale = perspective / (perspective + point.rotatedZ);
+            point.projected2DX = point.rotatedX * scale + config.centerX;
+            point.projected2DY = point.rotatedY * scale + config.centerY;
+            return scale;
+        }
+
+        // Get color based on lighting (simulated)
+        function getColorForPoint(point) {
+            // Light source from front-top-left
+            const lightX = -0.5;
+            const lightY = -0.7;
+            const lightZ = 1;
+
+            // Normalize point position (it's on sphere surface)
+            const normalX = point.rotatedX / config.radius;
+            const normalY = point.rotatedY / config.radius;
+            const normalZ = point.rotatedZ / config.radius;
+
+            // Calculate dot product (lighting intensity)
+            const lighting = normalX * lightX + normalY * lightY + normalZ * lightZ;
+
+            // Map lighting to color palette
+            if (lighting > 0.5) {
+                return colors.light[Math.floor(Math.random() * colors.light.length)];
+            } else if (lighting > 0) {
+                return colors.medium[Math.floor(Math.random() * colors.medium.length)];
+            } else if (lighting > -0.3) {
+                return colors.dark[Math.floor(Math.random() * colors.dark.length)];
+            } else {
+                return colors.shadow[Math.floor(Math.random() * colors.shadow.length)];
+            }
+        }
+
+        // Rotate and project all points
+        function updateGeometry() {
+            // Update all points in all lines
+            const allPoints = new Set();
+            allLines.forEach(line => {
+                allPoints.add(line.point1);
+                allPoints.add(line.point2);
+            });
+
+            allPoints.forEach(point => {
+                let rotated = rotateY(point, angleY);
+                rotated = rotateX(rotated, angleX);
+                rotated = rotateZ(rotated, angleZ);
+
+                point.rotatedX = rotated.x;
+                point.rotatedY = rotated.y;
+                point.rotatedZ = rotated.z;
+
+                project3D(point);
+            });
+
+            // Update line colors based on lighting
+            allLines.forEach(line => {
+                const midPoint = {
+                    rotatedX: (line.point1.rotatedX + line.point2.rotatedX) / 2,
+                    rotatedY: (line.point1.rotatedY + line.point2.rotatedY) / 2,
+                    rotatedZ: (line.point1.rotatedZ + line.point2.rotatedZ) / 2
+                };
+                line.color = getColorForPoint(midPoint);
+
+                // Vary line width based on depth
+                const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+                line.width = avgZ > 0 ? 1.5 : 0.8;
+            });
+        }
+
+        // Draw all lines
+        function drawLines() {
+            // Sort lines by depth (back to front)
+            const sortedLines = allLines.slice().sort((a, b) => {
+                const avgZA = (a.point1.rotatedZ + a.point2.rotatedZ) / 2;
+                const avgZB = (b.point1.rotatedZ + b.point2.rotatedZ) / 2;
+                return avgZA - avgZB;
+            });
+
+            sortedLines.forEach(line => {
+                // Only draw if both points are visible (basic culling)
+                const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+
+                // Calculate opacity based on depth
+                const opacity = avgZ > 0 ? 0.9 : 0.5;
+
+                ctx.beginPath();
+                ctx.strokeStyle = line.color + Math.floor(opacity * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = line.width;
+                ctx.moveTo(line.point1.projected2DX, line.point1.projected2DY);
+                ctx.lineTo(line.point2.projected2DX, line.point2.projected2DY);
+                ctx.stroke();
+            });
+        }
+
+        // Animation loop
+        function animate() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update rotation
+            angleY += config.rotationSpeed;
+            angleX += config.rotationSpeed * 0.3;
+
+            // Update and draw
+            updateGeometry();
+            drawLines();
+
+            // Continue animation
+            requestAnimationFrame(animate);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            config.centerX = canvas.width / 2;
+            config.centerY = canvas.height / 2;
+            config.radius = Math.min(canvas.width, canvas.height) * 0.3;
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
