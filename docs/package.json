@@ -1,0 +1,13 @@
+{
+  "name": "mars-gif-generator",
+  "version": "1.0.0",
+  "description": "Generate Mars W X-Mas Ornament GIF",
+  "main": "generate-gif.js",
+  "scripts": {
+    "generate": "node generate-gif.js"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "gifencoder": "^2.0.1"
+  }
+}
