@@ -45,9 +45,10 @@
             centerX: canvas.width / 2,
             centerY: canvas.height / 2,
             rotationSpeed: 0.003,
-            latitudeLines: 20,
-            longitudeLines: 24,
-            shadingDensity: 300, // Number of impressionistic shading lines
+            latitudeLines: 40,
+            longitudeLines: 48,
+            shadingDensity: 1200, // Number of impressionistic shading lines
+            axialTilt: 25.19 * Math.PI / 180, // Mars axial tilt in radians
         };
 
         // Mars color palette
@@ -133,15 +134,21 @@
             const lines = [];
 
             for (let i = 0; i < config.shadingDensity; i++) {
-                // Random points on sphere surface
+                // Random points on sphere surface, biased toward front (positive z)
                 const theta1 = Math.random() * Math.PI;
                 const phi1 = Math.random() * 2 * Math.PI;
-                const theta2 = theta1 + (Math.random() - 0.5) * 0.5; // Nearby point
-                const phi2 = phi1 + (Math.random() - 0.5) * 0.5;
 
-                const x1 = config.radius * Math.sin(theta1) * Math.cos(phi1);
+                // Bias: create more lines at the front
+                const bias = Math.random();
+                const useBias = bias < 0.6; // 60% of lines will be biased to front
+                const finalPhi1 = useBias ? (phi1 * 0.5 + Math.PI * 0.75) : phi1;
+
+                const theta2 = theta1 + (Math.random() - 0.5) * 0.5; // Nearby point
+                const phi2 = finalPhi1 + (Math.random() - 0.5) * 0.5;
+
+                const x1 = config.radius * Math.sin(theta1) * Math.cos(finalPhi1);
                 const y1 = config.radius * Math.cos(theta1);
-                const z1 = config.radius * Math.sin(theta1) * Math.sin(phi1);
+                const z1 = config.radius * Math.sin(theta1) * Math.sin(finalPhi1);
 
                 const x2 = config.radius * Math.sin(theta2) * Math.cos(phi2);
                 const y2 = config.radius * Math.cos(theta2);
@@ -153,11 +160,59 @@
             return lines;
         }
 
+        // Create "W" artifact at equator
+        function createWArtifact() {
+            const lines = [];
+            const segments = 50; // Smoothness of the W
+            const wWidth = Math.PI / 12; // Width of the W in radians
+            const wHeight = 0.15; // Height of W peaks
+
+            for (let i = 0; i < segments; i++) {
+                const t = i / segments;
+                const nextT = (i + 1) / segments;
+
+                // Create W shape: down, up, down, up
+                const wShape = (x) => {
+                    const normalized = (x % 1) * 4; // Split into 4 parts
+                    if (normalized < 1) return normalized; // Down to valley
+                    if (normalized < 2) return 2 - normalized; // Up to peak
+                    if (normalized < 3) return normalized - 2; // Down to valley
+                    return 4 - normalized; // Up to end
+                };
+
+                const lat1 = (wShape(t) - 0.5) * wHeight;
+                const lat2 = (wShape(nextT) - 0.5) * wHeight;
+                const lon1 = t * wWidth;
+                const lon2 = nextT * wWidth;
+
+                // Convert to 3D coordinates
+                const theta1 = Math.PI / 2 - lat1;
+                const phi1 = lon1;
+                const theta2 = Math.PI / 2 - lat2;
+                const phi2 = lon2;
+
+                const x1 = config.radius * Math.sin(theta1) * Math.cos(phi1);
+                const y1 = config.radius * Math.cos(theta1);
+                const z1 = config.radius * Math.sin(theta1) * Math.sin(phi1);
+
+                const x2 = config.radius * Math.sin(theta2) * Math.cos(phi2);
+                const y2 = config.radius * Math.cos(theta2);
+                const z2 = config.radius * Math.sin(theta2) * Math.sin(phi2);
+
+                const line = new Line(new Point3D(x1, y1, z1), new Point3D(x2, y2, z2));
+                line.isArtifact = true; // Mark as artifact for special coloring
+                lines.push(line);
+            }
+
+            return lines;
+        }
+
         // Initialize geometry
         const spherePoints = createSpherePoints();
         const structuralLines = createStructuralLines(spherePoints);
         const shadingLines = createShadingLines();
-        const allLines = [...structuralLines, ...shadingLines];
+        const wArtifact = createWArtifact();
+        const allLines = [...structuralLines, ...shadingLines, ...wArtifact];
 
         // Rotation angles
         let angleX = 0;
@@ -235,9 +290,9 @@
             });
 
             allPoints.forEach(point => {
-                let rotated = rotateY(point, angleY);
-                rotated = rotateX(rotated, angleX);
-                rotated = rotateZ(rotated, angleZ);
+                // Apply axial tilt first, then rotation around tilted axis
+                let rotated = rotateX(point, config.axialTilt);
+                rotated = rotateY(rotated, angleY);
 
                 point.rotatedX = rotated.x;
                 point.rotatedY = rotated.y;
@@ -253,11 +308,23 @@
                     rotatedY: (line.point1.rotatedY + line.point2.rotatedY) / 2,
                     rotatedZ: (line.point1.rotatedZ + line.point2.rotatedZ) / 2
                 };
-                line.color = getColorForPoint(midPoint);
 
-                // Vary line width based on depth
-                const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
-                line.width = avgZ > 0 ? 1.5 : 0.8;
+                // Special coloring for W artifact
+                if (line.isArtifact) {
+                    const baseColor = getColorForPoint(midPoint);
+                    // Make it slightly darker by adjusting the hex color
+                    const hex = baseColor.replace('#', '');
+                    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 20);
+                    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
+                    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
+                    line.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                    line.width = 1.2; // Slightly thicker for visibility
+                } else {
+                    line.color = getColorForPoint(midPoint);
+                    // Vary line width based on depth
+                    const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+                    line.width = avgZ > 0 ? 0.8 : 0.4;
+                }
             });
         }
 
@@ -291,9 +358,8 @@
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Update rotation
+            // Update rotation - only rotate around Y-axis (vertical, like natural planet rotation)
             angleY += config.rotationSpeed;
-            angleX += config.rotationSpeed * 0.3;
 
             // Update and draw
             updateGeometry();
