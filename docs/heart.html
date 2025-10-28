@@ -171,14 +171,19 @@
         function createTextArtifact() {
             const lines = [];
 
-            // Define the text path "M <3 L" as a series of strokes
+            // Define the text path "M ♥ L" as a series of strokes
             const textStrokes = [
                 // Letter M
                 {points: [[0, 1], [0, 0], [0.15, 0.5], [0.3, 0], [0.3, 1]]},
-                // Heart symbol <3
-                {points: [[0.45, 0.3], [0.5, 0.2], [0.55, 0.3], [0.5, 0.6]]},
-                {points: [[0.5, 0.2], [0.45, 0.3]]},
-                {points: [[0.5, 0.2], [0.55, 0.3]]},
+                // Heart symbol ♥ - drawn as a proper heart shape
+                // Left top curve
+                {points: [[0.5, 0.25], [0.43, 0.15], [0.38, 0.25]]},
+                // Right top curve
+                {points: [[0.5, 0.25], [0.57, 0.15], [0.62, 0.25]]},
+                // Left side down
+                {points: [[0.38, 0.25], [0.42, 0.5], [0.5, 0.75]]},
+                // Right side down
+                {points: [[0.62, 0.25], [0.58, 0.5], [0.5, 0.75]]},
                 // Letter L
                 {points: [[0.7, 0], [0.7, 1], [0.95, 1]]}
             ];
@@ -345,14 +350,27 @@
                     rotatedZ: (line.point1.rotatedZ + line.point2.rotatedZ) / 2
                 };
 
-                // Special coloring for text artifact
+                // Special coloring for text artifact - reverse colors based on position
                 if (line.isArtifact) {
                     const baseColor = getColorForPoint(midPoint);
-                    // Make it slightly darker by adjusting the hex color
                     const hex = baseColor.replace('#', '');
-                    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 20);
-                    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
-                    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
+                    let r = parseInt(hex.substr(0, 2), 16);
+                    let g = parseInt(hex.substr(2, 2), 16);
+                    let b = parseInt(hex.substr(4, 2), 16);
+
+                    // Reverse the coloring: brighter when facing us, darker on back
+                    if (midPoint.rotatedZ > 0) {
+                        // Facing us: make brighter/more orange
+                        r = Math.min(255, r + 40);
+                        g = Math.min(255, g + 20);
+                        b = Math.max(0, b - 10);
+                    } else {
+                        // On back: make darker
+                        r = Math.max(0, r - 40);
+                        g = Math.max(0, g - 40);
+                        b = Math.max(0, b - 40);
+                    }
+
                     line.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
                     line.width = 2.8; // Bold for visibility on both sides
                 } else {
