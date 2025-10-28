@@ -48,7 +48,7 @@
             latitudeLines: 40,
             longitudeLines: 48,
             shadingDensity: 1200, // Number of impressionistic shading lines
-            axialTilt: 25.19 * Math.PI / 180, // Mars axial tilt in radians
+            axialTilt: 5 * Math.PI / 180, // Reduced tilt for more stable vertical axis
         };
 
         // Mars color palette (same colors as Mars animation)
@@ -170,7 +170,6 @@
         // Create "M <3 L" artifact on heart surface
         function createTextArtifact() {
             const lines = [];
-            const segments = 80;
 
             // Define the text path "M <3 L" as a series of strokes
             const textStrokes = [
@@ -184,47 +183,58 @@
                 {points: [[0.7, 0], [0.7, 1], [0.95, 1]]}
             ];
 
-            // Place text on heart surface
-            textStrokes.forEach(stroke => {
-                const points = stroke.points;
-                for (let i = 0; i < points.length - 1; i++) {
-                    // Interpolate between points for smooth lines
-                    const [x1, y1] = points[i];
-                    const [x2, y2] = points[i + 1];
+            // Create multiple layers for bold effect (3 layers with slight offsets)
+            const boldLayers = [
+                {uOffset: 0, vOffset: 0},
+                {uOffset: 0.01, vOffset: 0},
+                {uOffset: 0, vOffset: 0.01},
+                {uOffset: -0.01, vOffset: 0},
+                {uOffset: 0, vOffset: -0.01}
+            ];
 
-                    for (let j = 0; j < 10; j++) {
-                        const t1 = j / 10;
-                        const t2 = (j + 1) / 10;
+            boldLayers.forEach(layer => {
+                // Place text on heart surface
+                textStrokes.forEach(stroke => {
+                    const points = stroke.points;
+                    for (let i = 0; i < points.length - 1; i++) {
+                        // Interpolate between points for smooth lines
+                        const [x1, y1] = points[i];
+                        const [x2, y2] = points[i + 1];
 
-                        const textX1 = x1 + (x2 - x1) * t1;
-                        const textY1 = y1 + (y2 - y1) * t1;
-                        const textX2 = x1 + (x2 - x1) * t2;
-                        const textY2 = y1 + (y2 - y1) * t2;
+                        for (let j = 0; j < 10; j++) {
+                            const t1 = j / 10;
+                            const t2 = (j + 1) / 10;
 
-                        // Map text coordinates to heart surface
-                        // Place near the center-front of the heart
-                        const u1 = Math.PI * 0.5 + (textY1 - 0.5) * 0.6;
-                        const v1 = Math.PI * 1.0 + (textX1 - 0.5) * 0.8;
-                        const u2 = Math.PI * 0.5 + (textY2 - 0.5) * 0.6;
-                        const v2 = Math.PI * 1.0 + (textX2 - 0.5) * 0.8;
+                            const textX1 = x1 + (x2 - x1) * t1;
+                            const textY1 = y1 + (y2 - y1) * t1;
+                            const textX2 = x1 + (x2 - x1) * t2;
+                            const textY2 = y1 + (y2 - y1) * t2;
 
-                        const heartX1 = 16 * Math.pow(Math.sin(u1), 3);
-                        const heartY1 = 13 * Math.cos(u1) - 5 * Math.cos(2*u1) - 2 * Math.cos(3*u1) - Math.cos(4*u1);
-                        const x1_3d = heartX1 * Math.cos(v1) * config.scale;
-                        const y1_3d = -heartY1 * config.scale;
-                        const z1_3d = heartX1 * Math.sin(v1) * config.scale;
+                            // Map text coordinates to heart surface
+                            // Keep at equatorial band height with minimal vertical spread
+                            const u1 = Math.PI * 0.5 + (textY1 - 0.5) * 0.15 + layer.uOffset;
+                            const v1 = Math.PI * 1.0 + (textX1 - 0.5) * 0.8 + layer.vOffset;
+                            const u2 = Math.PI * 0.5 + (textY2 - 0.5) * 0.15 + layer.uOffset;
+                            const v2 = Math.PI * 1.0 + (textX2 - 0.5) * 0.8 + layer.vOffset;
 
-                        const heartX2 = 16 * Math.pow(Math.sin(u2), 3);
-                        const heartY2 = 13 * Math.cos(u2) - 5 * Math.cos(2*u2) - 2 * Math.cos(3*u2) - Math.cos(4*u2);
-                        const x2_3d = heartX2 * Math.cos(v2) * config.scale;
-                        const y2_3d = -heartY2 * config.scale;
-                        const z2_3d = heartX2 * Math.sin(v2) * config.scale;
+                            const heartX1 = 16 * Math.pow(Math.sin(u1), 3);
+                            const heartY1 = 13 * Math.cos(u1) - 5 * Math.cos(2*u1) - 2 * Math.cos(3*u1) - Math.cos(4*u1);
+                            const x1_3d = heartX1 * Math.cos(v1) * config.scale;
+                            const y1_3d = -heartY1 * config.scale;
+                            const z1_3d = heartX1 * Math.sin(v1) * config.scale;
 
-                        const line = new Line(new Point3D(x1_3d, y1_3d, z1_3d), new Point3D(x2_3d, y2_3d, z2_3d));
-                        line.isArtifact = true;
-                        lines.push(line);
+                            const heartX2 = 16 * Math.pow(Math.sin(u2), 3);
+                            const heartY2 = 13 * Math.cos(u2) - 5 * Math.cos(2*u2) - 2 * Math.cos(3*u2) - Math.cos(4*u2);
+                            const x2_3d = heartX2 * Math.cos(v2) * config.scale;
+                            const y2_3d = -heartY2 * config.scale;
+                            const z2_3d = heartX2 * Math.sin(v2) * config.scale;
+
+                            const line = new Line(new Point3D(x1_3d, y1_3d, z1_3d), new Point3D(x2_3d, y2_3d, z2_3d));
+                            line.isArtifact = true;
+                            lines.push(line);
+                        }
                     }
-                }
+                });
             });
 
             return lines;
@@ -344,7 +354,7 @@
                     const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
                     const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
                     line.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                    line.width = 1.2; // Slightly thicker for visibility
+                    line.width = 2.8; // Bold for visibility on both sides
                 } else {
                     line.color = getColorForPoint(midPoint);
                     // Vary line width based on depth
@@ -368,7 +378,13 @@
                 const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
 
                 // Calculate opacity based on depth
-                const opacity = avgZ > 0 ? 0.9 : 0.5;
+                // Text artifact gets higher opacity even on back side
+                let opacity;
+                if (line.isArtifact) {
+                    opacity = avgZ > 0 ? 0.95 : 0.75; // Text stays visible on back
+                } else {
+                    opacity = avgZ > 0 ? 0.9 : 0.5;
+                }
 
                 ctx.beginPath();
                 ctx.strokeStyle = line.color + Math.floor(opacity * 255).toString(16).padStart(2, '0');
