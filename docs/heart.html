@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart M <3 L</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: transparent;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background: transparent;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="heartCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('heartCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Configuration
+        const config = {
+            scale: Math.min(canvas.width, canvas.height) * 0.015,
+            centerX: canvas.width / 2,
+            centerY: canvas.height / 2,
+            rotationSpeed: 0.0036,
+            latitudeLines: 40,
+            longitudeLines: 48,
+            shadingDensity: 1200, // Number of impressionistic shading lines
+            axialTilt: 25.19 * Math.PI / 180, // Mars axial tilt in radians
+        };
+
+        // Mars color palette (same colors as Mars animation)
+        const colors = {
+            light: ['#FF6B35', '#FF8C42', '#FFA552', '#FFB366'], // Orange/light red
+            medium: ['#C44536', '#D4573B', '#E06940', '#B43D2F'], // Medium red
+            dark: ['#8B2E1F', '#6B1F14', '#4A1410', '#2C0D0A'], // Dark red/black
+            shadow: ['#1A0806', '#0D0403', '#000000'] // Deep shadow
+        };
+
+        // 3D Point class
+        class Point3D {
+            constructor(x, y, z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.rotatedX = x;
+                this.rotatedY = y;
+                this.rotatedZ = z;
+                this.projected2DX = 0;
+                this.projected2DY = 0;
+            }
+        }
+
+        // Line class
+        class Line {
+            constructor(point1, point2, color, width) {
+                this.point1 = point1;
+                this.point2 = point2;
+                this.color = color;
+                this.width = width;
+            }
+        }
+
+        // Create heart shape points using parametric equations
+        function createHeartPoints() {
+            const points = [];
+
+            // Create latitude and longitude grid points on heart surface
+            for (let lat = 0; lat <= config.latitudeLines; lat++) {
+                const u = (lat * Math.PI * 2) / config.latitudeLines; // 0 to 2π
+
+                for (let lon = 0; lon <= config.longitudeLines; lon++) {
+                    const v = (lon * Math.PI * 2) / config.longitudeLines; // 0 to 2π
+
+                    // Parametric heart surface equations
+                    // Modified to create a smooth 3D heart shape
+                    const heartX = 16 * Math.pow(Math.sin(u), 3);
+                    const heartY = 13 * Math.cos(u) - 5 * Math.cos(2*u) - 2 * Math.cos(3*u) - Math.cos(4*u);
+
+                    // Rotate the 2D heart profile around the z-axis
+                    const x = heartX * Math.cos(v) * config.scale;
+                    const y = -heartY * config.scale; // Flip Y to orient heart correctly
+                    const z = heartX * Math.sin(v) * config.scale;
+
+                    points.push(new Point3D(x, y, z));
+                }
+            }
+
+            return points;
+        }
+
+        // Create structural lines (latitude and longitude)
+        function createStructuralLines(points) {
+            const lines = [];
+
+            // Latitude lines
+            for (let lat = 0; lat <= config.latitudeLines; lat++) {
+                for (let lon = 0; lon < config.longitudeLines; lon++) {
+                    const index = lat * (config.longitudeLines + 1) + lon;
+                    const nextIndex = lat * (config.longitudeLines + 1) + lon + 1;
+                    lines.push(new Line(points[index], points[nextIndex]));
+                }
+            }
+
+            // Longitude lines
+            for (let lon = 0; lon <= config.longitudeLines; lon++) {
+                for (let lat = 0; lat < config.latitudeLines; lat++) {
+                    const index = lat * (config.longitudeLines + 1) + lon;
+                    const nextIndex = (lat + 1) * (config.longitudeLines + 1) + lon;
+                    lines.push(new Line(points[index], points[nextIndex]));
+                }
+            }
+
+            return lines;
+        }
+
+        // Create impressionistic shading lines on heart surface
+        function createShadingLines() {
+            const lines = [];
+
+            for (let i = 0; i < config.shadingDensity; i++) {
+                // Random points on heart surface
+                const u1 = Math.random() * Math.PI * 2;
+                const v1 = Math.random() * Math.PI * 2;
+
+                const u2 = u1 + (Math.random() - 0.5) * 0.5;
+                const v2 = v1 + (Math.random() - 0.5) * 0.5;
+
+                // Generate points on heart surface
+                const heartX1 = 16 * Math.pow(Math.sin(u1), 3);
+                const heartY1 = 13 * Math.cos(u1) - 5 * Math.cos(2*u1) - 2 * Math.cos(3*u1) - Math.cos(4*u1);
+                const x1 = heartX1 * Math.cos(v1) * config.scale;
+                const y1 = -heartY1 * config.scale;
+                const z1 = heartX1 * Math.sin(v1) * config.scale;
+
+                const heartX2 = 16 * Math.pow(Math.sin(u2), 3);
+                const heartY2 = 13 * Math.cos(u2) - 5 * Math.cos(2*u2) - 2 * Math.cos(3*u2) - Math.cos(4*u2);
+                const x2 = heartX2 * Math.cos(v2) * config.scale;
+                const y2 = -heartY2 * config.scale;
+                const z2 = heartX2 * Math.sin(v2) * config.scale;
+
+                lines.push(new Line(new Point3D(x1, y1, z1), new Point3D(x2, y2, z2)));
+            }
+
+            return lines;
+        }
+
+        // Create "M <3 L" artifact on heart surface
+        function createTextArtifact() {
+            const lines = [];
+            const segments = 80;
+
+            // Define the text path "M <3 L" as a series of strokes
+            const textStrokes = [
+                // Letter M
+                {points: [[0, 1], [0, 0], [0.15, 0.5], [0.3, 0], [0.3, 1]]},
+                // Heart symbol <3
+                {points: [[0.45, 0.3], [0.5, 0.2], [0.55, 0.3], [0.5, 0.6]]},
+                {points: [[0.5, 0.2], [0.45, 0.3]]},
+                {points: [[0.5, 0.2], [0.55, 0.3]]},
+                // Letter L
+                {points: [[0.7, 0], [0.7, 1], [0.95, 1]]}
+            ];
+
+            // Place text on heart surface
+            textStrokes.forEach(stroke => {
+                const points = stroke.points;
+                for (let i = 0; i < points.length - 1; i++) {
+                    // Interpolate between points for smooth lines
+                    const [x1, y1] = points[i];
+                    const [x2, y2] = points[i + 1];
+
+                    for (let j = 0; j < 10; j++) {
+                        const t1 = j / 10;
+                        const t2 = (j + 1) / 10;
+
+                        const textX1 = x1 + (x2 - x1) * t1;
+                        const textY1 = y1 + (y2 - y1) * t1;
+                        const textX2 = x1 + (x2 - x1) * t2;
+                        const textY2 = y1 + (y2 - y1) * t2;
+
+                        // Map text coordinates to heart surface
+                        // Place near the center-front of the heart
+                        const u1 = Math.PI * 0.5 + (textY1 - 0.5) * 0.6;
+                        const v1 = Math.PI * 1.0 + (textX1 - 0.5) * 0.8;
+                        const u2 = Math.PI * 0.5 + (textY2 - 0.5) * 0.6;
+                        const v2 = Math.PI * 1.0 + (textX2 - 0.5) * 0.8;
+
+                        const heartX1 = 16 * Math.pow(Math.sin(u1), 3);
+                        const heartY1 = 13 * Math.cos(u1) - 5 * Math.cos(2*u1) - 2 * Math.cos(3*u1) - Math.cos(4*u1);
+                        const x1_3d = heartX1 * Math.cos(v1) * config.scale;
+                        const y1_3d = -heartY1 * config.scale;
+                        const z1_3d = heartX1 * Math.sin(v1) * config.scale;
+
+                        const heartX2 = 16 * Math.pow(Math.sin(u2), 3);
+                        const heartY2 = 13 * Math.cos(u2) - 5 * Math.cos(2*u2) - 2 * Math.cos(3*u2) - Math.cos(4*u2);
+                        const x2_3d = heartX2 * Math.cos(v2) * config.scale;
+                        const y2_3d = -heartY2 * config.scale;
+                        const z2_3d = heartX2 * Math.sin(v2) * config.scale;
+
+                        const line = new Line(new Point3D(x1_3d, y1_3d, z1_3d), new Point3D(x2_3d, y2_3d, z2_3d));
+                        line.isArtifact = true;
+                        lines.push(line);
+                    }
+                }
+            });
+
+            return lines;
+        }
+
+        // Initialize geometry
+        const heartPoints = createHeartPoints();
+        const structuralLines = createStructuralLines(heartPoints);
+        const shadingLines = createShadingLines();
+        const textArtifact = createTextArtifact();
+        const allLines = [...structuralLines, ...shadingLines, ...textArtifact];
+
+        // Rotation angles
+        let angleX = 0;
+        let angleY = 0;
+        let angleZ = 0;
+
+        // Rotation matrix functions
+        function rotateX(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const y = point.y * cos - point.z * sin;
+            const z = point.y * sin + point.z * cos;
+            return { x: point.x, y, z };
+        }
+
+        function rotateY(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const x = point.x * cos + point.z * sin;
+            const z = -point.x * sin + point.z * cos;
+            return { x, y: point.y, z };
+        }
+
+        function rotateZ(point, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const x = point.x * cos - point.y * sin;
+            const y = point.x * sin + point.y * cos;
+            return { x, y, z: point.z };
+        }
+
+        // Project 3D point to 2D
+        function project3D(point) {
+            const perspective = 800;
+            const scale = perspective / (perspective + point.rotatedZ);
+            point.projected2DX = point.rotatedX * scale + config.centerX;
+            point.projected2DY = point.rotatedY * scale + config.centerY;
+            return scale;
+        }
+
+        // Get color based on lighting (simulated)
+        function getColorForPoint(point) {
+            // Light source from front-top-left
+            const lightX = -0.5;
+            const lightY = -0.7;
+            const lightZ = 1;
+
+            // Calculate normal (approximate for heart surface)
+            const len = Math.sqrt(point.rotatedX * point.rotatedX +
+                                 point.rotatedY * point.rotatedY +
+                                 point.rotatedZ * point.rotatedZ);
+            const normalX = len > 0 ? point.rotatedX / len : 0;
+            const normalY = len > 0 ? point.rotatedY / len : 0;
+            const normalZ = len > 0 ? point.rotatedZ / len : 0;
+
+            // Calculate dot product (lighting intensity)
+            const lighting = normalX * lightX + normalY * lightY + normalZ * lightZ;
+
+            // Map lighting to color palette
+            if (lighting > 0.5) {
+                return colors.light[Math.floor(Math.random() * colors.light.length)];
+            } else if (lighting > 0) {
+                return colors.medium[Math.floor(Math.random() * colors.medium.length)];
+            } else if (lighting > -0.3) {
+                return colors.dark[Math.floor(Math.random() * colors.dark.length)];
+            } else {
+                return colors.shadow[Math.floor(Math.random() * colors.shadow.length)];
+            }
+        }
+
+        // Rotate and project all points
+        function updateGeometry() {
+            // Update all points in all lines
+            const allPoints = new Set();
+            allLines.forEach(line => {
+                allPoints.add(line.point1);
+                allPoints.add(line.point2);
+            });
+
+            allPoints.forEach(point => {
+                // Apply axial tilt first, then rotation around tilted axis
+                let rotated = rotateX(point, config.axialTilt);
+                rotated = rotateY(rotated, angleY);
+
+                point.rotatedX = rotated.x;
+                point.rotatedY = rotated.y;
+                point.rotatedZ = rotated.z;
+
+                project3D(point);
+            });
+
+            // Update line colors based on lighting
+            allLines.forEach(line => {
+                const midPoint = {
+                    rotatedX: (line.point1.rotatedX + line.point2.rotatedX) / 2,
+                    rotatedY: (line.point1.rotatedY + line.point2.rotatedY) / 2,
+                    rotatedZ: (line.point1.rotatedZ + line.point2.rotatedZ) / 2
+                };
+
+                // Special coloring for text artifact
+                if (line.isArtifact) {
+                    const baseColor = getColorForPoint(midPoint);
+                    // Make it slightly darker by adjusting the hex color
+                    const hex = baseColor.replace('#', '');
+                    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 20);
+                    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
+                    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
+                    line.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                    line.width = 1.2; // Slightly thicker for visibility
+                } else {
+                    line.color = getColorForPoint(midPoint);
+                    // Vary line width based on depth
+                    const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+                    line.width = avgZ > 0 ? 0.8 : 0.4;
+                }
+            });
+        }
+
+        // Draw all lines
+        function drawLines() {
+            // Sort lines by depth (back to front)
+            const sortedLines = allLines.slice().sort((a, b) => {
+                const avgZA = (a.point1.rotatedZ + a.point2.rotatedZ) / 2;
+                const avgZB = (b.point1.rotatedZ + b.point2.rotatedZ) / 2;
+                return avgZA - avgZB;
+            });
+
+            sortedLines.forEach(line => {
+                // Only draw if both points are visible (basic culling)
+                const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+
+                // Calculate opacity based on depth
+                const opacity = avgZ > 0 ? 0.9 : 0.5;
+
+                ctx.beginPath();
+                ctx.strokeStyle = line.color + Math.floor(opacity * 255).toString(16).padStart(2, '0');
+                ctx.lineWidth = line.width;
+                ctx.moveTo(line.point1.projected2DX, line.point1.projected2DY);
+                ctx.lineTo(line.point2.projected2DX, line.point2.projected2DY);
+                ctx.stroke();
+            });
+        }
+
+        // Animation loop
+        function animate() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update rotation - only rotate around Y-axis (vertical, like natural planet rotation)
+            angleY += config.rotationSpeed;
+
+            // Update and draw
+            updateGeometry();
+            drawLines();
+
+            // Continue animation
+            requestAnimationFrame(animate);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            config.centerX = canvas.width / 2;
+            config.centerY = canvas.height / 2;
+            config.scale = Math.min(canvas.width, canvas.height) * 0.015;
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
