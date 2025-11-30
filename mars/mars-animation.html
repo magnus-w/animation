@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mars 3D Line Animation</title>
+    <title>Moebius Strip 3D Animation</title>
     <style>
         * {
             margin: 0;
@@ -29,10 +29,10 @@
     </style>
 </head>
 <body>
-    <canvas id="marsCanvas"></canvas>
+    <canvas id="moebiusCanvas"></canvas>
 
     <script>
-        const canvas = document.getElementById('marsCanvas');
+        const canvas = document.getElementById('moebiusCanvas');
         const ctx = canvas.getContext('2d');
 
         // Set canvas size
@@ -41,22 +41,22 @@
 
         // Configuration
         const config = {
-            radius: Math.min(canvas.width, canvas.height) * 0.3,
+            majorRadius: Math.min(canvas.width, canvas.height) * 0.25, // R - radius of centerline
+            stripWidth: Math.min(canvas.width, canvas.height) * 0.08, // Width of the strip
             centerX: canvas.width / 2,
             centerY: canvas.height / 2,
-            rotationSpeed: 0.003,
-            latitudeLines: 40,
-            longitudeLines: 48,
-            shadingDensity: 1200, // Number of impressionistic shading lines
-            axialTilt: 25.19 * Math.PI / 180, // Mars axial tilt in radians
+            flowSpeed: 0.015, // Speed of the flowing animation
+            uSegments: 80, // Segments around the strip
+            vSegments: 16, // Segments across the strip width
+            shadingDensity: 1000, // Number of impressionistic shading lines
         };
 
-        // Mars color palette
+        // Blue color palette
         const colors = {
-            light: ['#FF6B35', '#FF8C42', '#FFA552', '#FFB366'], // Orange/light red
-            medium: ['#C44536', '#D4573B', '#E06940', '#B43D2F'], // Medium red
-            dark: ['#8B2E1F', '#6B1F14', '#4A1410', '#2C0D0A'], // Dark red/black
-            shadow: ['#1A0806', '#0D0403', '#000000'] // Deep shadow
+            light: ['#ADD8E6', '#B0E0E6', '#AFEEEE', '#87CEEB'], // Light blue
+            medium: ['#4682B4', '#5F9EA0', '#4169E1', '#6495ED'], // Azure/medium blue
+            dark: ['#00008B', '#000080', '#191970', '#0C2340'], // Dark blue
+            shadow: ['#020B1A', '#010610', '#000000'] // Deep shadow
         };
 
         // 3D Point class
@@ -83,19 +83,25 @@
             }
         }
 
-        // Create sphere points
-        function createSpherePoints() {
+        // Create Moebius strip points using parametric equations
+        function createMoebiusPoints(flowOffset = 0) {
             const points = [];
 
-            // Create latitude and longitude grid points
-            for (let lat = 0; lat <= config.latitudeLines; lat++) {
-                const theta = (lat * Math.PI) / config.latitudeLines;
-                for (let lon = 0; lon <= config.longitudeLines; lon++) {
-                    const phi = (lon * 2 * Math.PI) / config.longitudeLines;
+            // Parametric equations for Moebius strip:
+            // x = (R + v * cos(u/2)) * cos(u)
+            // y = (R + v * cos(u/2)) * sin(u)
+            // z = v * sin(u/2)
+            // where u ∈ [0, 2π] and v ∈ [-width, +width]
 
-                    const x = config.radius * Math.sin(theta) * Math.cos(phi);
-                    const y = config.radius * Math.cos(theta);
-                    const z = config.radius * Math.sin(theta) * Math.sin(phi);
+            for (let i = 0; i <= config.uSegments; i++) {
+                const u = (i * 2 * Math.PI) / config.uSegments + flowOffset;
+
+                for (let j = 0; j <= config.vSegments; j++) {
+                    const v = (j / config.vSegments - 0.5) * 2 * config.stripWidth;
+
+                    const x = (config.majorRadius + v * Math.cos(u / 2)) * Math.cos(u);
+                    const y = (config.majorRadius + v * Math.cos(u / 2)) * Math.sin(u);
+                    const z = v * Math.sin(u / 2);
 
                     points.push(new Point3D(x, y, z));
                 }
@@ -104,24 +110,24 @@
             return points;
         }
 
-        // Create structural lines (latitude and longitude)
+        // Create structural lines for Moebius strip
         function createStructuralLines(points) {
             const lines = [];
 
-            // Latitude lines
-            for (let lat = 0; lat <= config.latitudeLines; lat++) {
-                for (let lon = 0; lon < config.longitudeLines; lon++) {
-                    const index = lat * (config.longitudeLines + 1) + lon;
-                    const nextIndex = lat * (config.longitudeLines + 1) + lon + 1;
+            // Lines along the strip (u direction)
+            for (let i = 0; i <= config.uSegments; i++) {
+                for (let j = 0; j < config.vSegments; j++) {
+                    const index = i * (config.vSegments + 1) + j;
+                    const nextIndex = i * (config.vSegments + 1) + j + 1;
                     lines.push(new Line(points[index], points[nextIndex]));
                 }
             }
 
-            // Longitude lines
-            for (let lon = 0; lon <= config.longitudeLines; lon++) {
-                for (let lat = 0; lat < config.latitudeLines; lat++) {
-                    const index = lat * (config.longitudeLines + 1) + lon;
-                    const nextIndex = (lat + 1) * (config.longitudeLines + 1) + lon;
+            // Lines across the strip (v direction)
+            for (let j = 0; j <= config.vSegments; j++) {
+                for (let i = 0; i < config.uSegments; i++) {
+                    const index = i * (config.vSegments + 1) + j;
+                    const nextIndex = (i + 1) * (config.vSegments + 1) + j;
                     lines.push(new Line(points[index], points[nextIndex]));
                 }
             }
@@ -129,30 +135,27 @@
             return lines;
         }
 
-        // Create impressionistic shading lines
-        function createShadingLines() {
+        // Create impressionistic shading lines on Moebius strip
+        function createShadingLines(flowOffset = 0) {
             const lines = [];
 
             for (let i = 0; i < config.shadingDensity; i++) {
-                // Random points on sphere surface, biased toward front (positive z)
-                const theta1 = Math.random() * Math.PI;
-                const phi1 = Math.random() * 2 * Math.PI;
+                // Random points on Moebius strip surface
+                const u1 = Math.random() * 2 * Math.PI + flowOffset;
+                const v1 = (Math.random() - 0.5) * 2 * config.stripWidth;
 
-                // Bias: create more lines at the front
-                const bias = Math.random();
-                const useBias = bias < 0.6; // 60% of lines will be biased to front
-                const finalPhi1 = useBias ? (phi1 * 0.5 + Math.PI * 0.75) : phi1;
+                // Nearby point for shading effect
+                const u2 = u1 + (Math.random() - 0.5) * 0.3;
+                const v2 = v1 + (Math.random() - 0.5) * config.stripWidth * 0.3;
 
-                const theta2 = theta1 + (Math.random() - 0.5) * 0.5; // Nearby point
-                const phi2 = finalPhi1 + (Math.random() - 0.5) * 0.5;
+                // Calculate 3D positions using Moebius parametric equations
+                const x1 = (config.majorRadius + v1 * Math.cos(u1 / 2)) * Math.cos(u1);
+                const y1 = (config.majorRadius + v1 * Math.cos(u1 / 2)) * Math.sin(u1);
+                const z1 = v1 * Math.sin(u1 / 2);
 
-                const x1 = config.radius * Math.sin(theta1) * Math.cos(finalPhi1);
-                const y1 = config.radius * Math.cos(theta1);
-                const z1 = config.radius * Math.sin(theta1) * Math.sin(finalPhi1);
-
-                const x2 = config.radius * Math.sin(theta2) * Math.cos(phi2);
-                const y2 = config.radius * Math.cos(theta2);
-                const z2 = config.radius * Math.sin(theta2) * Math.sin(phi2);
+                const x2 = (config.majorRadius + v2 * Math.cos(u2 / 2)) * Math.cos(u2);
+                const y2 = (config.majorRadius + v2 * Math.cos(u2 / 2)) * Math.sin(u2);
+                const z2 = v2 * Math.sin(u2 / 2);
 
                 lines.push(new Line(new Point3D(x1, y1, z1), new Point3D(x2, y2, z2)));
             }
@@ -160,62 +163,15 @@
             return lines;
         }
 
-        // Create "W" artifact at equator
-        function createWArtifact() {
-            const lines = [];
-            const segments = 50; // Smoothness of the W
-            const wWidth = Math.PI / 12; // Width of the W in radians
-            const wHeight = 0.15; // Height of W peaks
+        // Initialize geometry with flow animation
+        let flowOffset = 0;
+        let moebiusPoints = createMoebiusPoints(flowOffset);
+        let structuralLines = createStructuralLines(moebiusPoints);
+        let shadingLines = createShadingLines(flowOffset);
+        let allLines = [...structuralLines, ...shadingLines];
 
-            for (let i = 0; i < segments; i++) {
-                const t = i / segments;
-                const nextT = (i + 1) / segments;
-
-                // Create W shape: down, up, down, up
-                const wShape = (x) => {
-                    const normalized = (x % 1) * 4; // Split into 4 parts
-                    if (normalized < 1) return normalized; // Down to valley
-                    if (normalized < 2) return 2 - normalized; // Up to peak
-                    if (normalized < 3) return normalized - 2; // Down to valley
-                    return 4 - normalized; // Up to end
-                };
-
-                const lat1 = (wShape(t) - 0.5) * wHeight;
-                const lat2 = (wShape(nextT) - 0.5) * wHeight;
-                const lon1 = t * wWidth;
-                const lon2 = nextT * wWidth;
-
-                // Convert to 3D coordinates
-                const theta1 = Math.PI / 2 - lat1;
-                const phi1 = lon1;
-                const theta2 = Math.PI / 2 - lat2;
-                const phi2 = lon2;
-
-                const x1 = config.radius * Math.sin(theta1) * Math.cos(phi1);
-                const y1 = config.radius * Math.cos(theta1);
-                const z1 = config.radius * Math.sin(theta1) * Math.sin(phi1);
-
-                const x2 = config.radius * Math.sin(theta2) * Math.cos(phi2);
-                const y2 = config.radius * Math.cos(theta2);
-                const z2 = config.radius * Math.sin(theta2) * Math.sin(phi2);
-
-                const line = new Line(new Point3D(x1, y1, z1), new Point3D(x2, y2, z2));
-                line.isArtifact = true; // Mark as artifact for special coloring
-                lines.push(line);
-            }
-
-            return lines;
-        }
-
-        // Initialize geometry
-        const spherePoints = createSpherePoints();
-        const structuralLines = createStructuralLines(spherePoints);
-        const shadingLines = createShadingLines();
-        const wArtifact = createWArtifact();
-        const allLines = [...structuralLines, ...shadingLines, ...wArtifact];
-
-        // Rotation angles
-        let angleX = 0;
+        // Rotation angles for 3D viewing
+        let angleX = Math.PI / 6; // Tilt for better viewing
         let angleY = 0;
         let angleZ = 0;
 
@@ -255,15 +211,17 @@
 
         // Get color based on lighting (simulated)
         function getColorForPoint(point) {
-            // Light source from front-top-left
-            const lightX = -0.5;
+            // Light source from front-top-right
+            const lightX = 0.5;
             const lightY = -0.7;
             const lightZ = 1;
 
-            // Normalize point position (it's on sphere surface)
-            const normalX = point.rotatedX / config.radius;
-            const normalY = point.rotatedY / config.radius;
-            const normalZ = point.rotatedZ / config.radius;
+            // Calculate approximate normal for Moebius strip surface
+            // Using the rotated position as an approximation
+            const dist = Math.sqrt(point.rotatedX * point.rotatedX + point.rotatedY * point.rotatedY + point.rotatedZ * point.rotatedZ);
+            const normalX = point.rotatedX / dist;
+            const normalY = point.rotatedY / dist;
+            const normalZ = point.rotatedZ / dist;
 
             // Calculate dot product (lighting intensity)
             const lighting = normalX * lightX + normalY * lightY + normalZ * lightZ;
@@ -290,9 +248,10 @@
             });
 
             allPoints.forEach(point => {
-                // Apply axial tilt first, then rotation around tilted axis
-                let rotated = rotateX(point, config.axialTilt);
+                // Apply rotation for 3D viewing
+                let rotated = rotateX(point, angleX);
                 rotated = rotateY(rotated, angleY);
+                rotated = rotateZ(rotated, angleZ);
 
                 point.rotatedX = rotated.x;
                 point.rotatedY = rotated.y;
@@ -309,22 +268,10 @@
                     rotatedZ: (line.point1.rotatedZ + line.point2.rotatedZ) / 2
                 };
 
-                // Special coloring for W artifact
-                if (line.isArtifact) {
-                    const baseColor = getColorForPoint(midPoint);
-                    // Make it slightly darker by adjusting the hex color
-                    const hex = baseColor.replace('#', '');
-                    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 20);
-                    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 20);
-                    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 20);
-                    line.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                    line.width = 1.2; // Slightly thicker for visibility
-                } else {
-                    line.color = getColorForPoint(midPoint);
-                    // Vary line width based on depth
-                    const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
-                    line.width = avgZ > 0 ? 0.8 : 0.4;
-                }
+                line.color = getColorForPoint(midPoint);
+                // Vary line width based on depth
+                const avgZ = (line.point1.rotatedZ + line.point2.rotatedZ) / 2;
+                line.width = avgZ > 0 ? 0.8 : 0.4;
             });
         }
 
@@ -358,8 +305,17 @@
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Update rotation - only rotate around Y-axis (vertical, like natural planet rotation)
-            angleY += config.rotationSpeed;
+            // Update flow offset to create flowing animation
+            flowOffset += config.flowSpeed;
+
+            // Recreate geometry with new flow offset for smooth animation
+            moebiusPoints = createMoebiusPoints(flowOffset);
+            structuralLines = createStructuralLines(moebiusPoints);
+            shadingLines = createShadingLines(flowOffset);
+            allLines = [...structuralLines, ...shadingLines];
+
+            // Optionally add slow rotation for visual interest
+            angleY += 0.002;
 
             // Update and draw
             updateGeometry();
@@ -375,7 +331,8 @@
             canvas.height = window.innerHeight;
             config.centerX = canvas.width / 2;
             config.centerY = canvas.height / 2;
-            config.radius = Math.min(canvas.width, canvas.height) * 0.3;
+            config.majorRadius = Math.min(canvas.width, canvas.height) * 0.25;
+            config.stripWidth = Math.min(canvas.width, canvas.height) * 0.08;
         });
 
         // Start animation
