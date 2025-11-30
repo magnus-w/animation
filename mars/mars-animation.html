@@ -45,7 +45,7 @@
             stripWidth: Math.min(canvas.width, canvas.height) * 0.08, // Width of the strip
             centerX: canvas.width / 2,
             centerY: canvas.height / 2,
-            flowSpeed: 0.015, // Speed of the flowing animation
+            flowSpeed: 0.0045, // Speed of the flowing animation (70% slower)
             uSegments: 80, // Segments around the strip
             vSegments: 16, // Segments across the strip width
             shadingDensity: 1000, // Number of impressionistic shading lines
@@ -315,7 +315,7 @@
             allLines = [...structuralLines, ...shadingLines];
 
             // Optionally add slow rotation for visual interest
-            angleY += 0.002;
+            angleY += 0.0006;
 
             // Update and draw
             updateGeometry();
