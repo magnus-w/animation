@@ -64,7 +64,7 @@ body, html {
 #poem-inner {
     text-align: left; /* Keep poem left-aligned internally for structure */
     white-space: pre-wrap;
-    font-size: clamp(21px, 3.75vw, 54px);
+    font-size: clamp(21px, 3vw, 36px);
     line-height: 1.6;
     text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
     max-width: 90vw;
