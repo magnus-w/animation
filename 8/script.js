@@ -21,13 +21,25 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const lineElements = [];
-
+    
+    // Pre-calculate line trigger times so empty lines don't cause long invisible pauses
+    // Using 0 as a starting point. `firstLineDelayMs` will be added in the loop.
+    let currentLineTime = 0; 
+    
     poemLines.forEach((text, i) => {
         const span = document.createElement('span');
         span.className = 'poem-line';
         span.textContent = text || ' '; // Keep space for empty lines
+        span.dataset.triggerTime = currentLineTime;
         poemInner.appendChild(span);
         lineElements.push(span);
+        
+        // Add interval, but much shorter for empty lines
+        if (text.trim() === '') {
+            currentLineTime += 500; // tiny pause for blank line
+        } else {
+            currentLineTime += 3500; // linesIntervalMs (3.5s stagger)
+        }
     });
 
     // 2. Procedural Pixel Art Drawing
@@ -211,9 +223,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let progress = Math.min(Math.max(0, elapsed - cameraDelayMs) / durationMs, 1.0);
         
         // --- 1. Lines Dissolve ---
-        lineElements.forEach((el, index) => {
-            const lineTriggerTime = firstLineDelayMs + index * linesIntervalMs;
-            if (elapsed >= lineTriggerTime && !el.classList.contains('visible')) {
+        lineElements.forEach((el) => {
+            const triggerTime = firstLineDelayMs + parseFloat(el.dataset.triggerTime);
+            if (elapsed >= triggerTime && !el.classList.contains('visible')) {
                 el.classList.add('visible');
             }
         });
