@@ -1,0 +1,84 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #0b0b14; /* Deep space black/dark blue */
+    color: #fff;
+    font-family: 'Jersey 10', 'Courier New', Courier, monospace;
+    overflow: hidden; /* No scrollbars, controlled motion */
+}
+
+#retro-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+.parallax-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    will-change: transform;
+}
+
+#sun-layer canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges; /* Webkit / Firefox support */
+    width: 256px; 
+    height: 256px;
+    position: absolute;
+    top: 5vh;
+    left: 60vw;
+    transform: translate(-50%, 0);
+}
+
+#earth-layer canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    width: 384px; 
+    height: 384px;
+    position: absolute;
+    top: 110vh; /* Start completely offscreen below */
+    left: 35vw; 
+}
+
+/* Make sure text container covers full screen for centering */
+#poem-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center; /* Center horizontally overall */
+    pointer-events: none; /* Let clicks pass to canvas if needed */
+    z-index: 100;
+}
+
+#poem-inner {
+    text-align: left; /* Keep poem left-aligned internally for structure */
+    white-space: pre-wrap;
+    font-size: clamp(14px, 2.5vw, 36px);
+    line-height: 1.6;
+    text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    max-width: 90vw;
+}
+
+.poem-line {
+    opacity: 0;
+    transition: opacity 3s ease-in-out;
+    display: block;
+    min-height: 1.6em; /* reserve space for empty lines */
+    /* text shadows for the classic retro game text pop */
+    color: #e0e0e0;
+}
+
+.poem-line.visible {
+    opacity: 1;
+}

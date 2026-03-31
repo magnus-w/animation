@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Åtta Minuter</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jersey+10&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="retro-container">
+        <!-- Parallax Background Elements -->
+        <canvas id="stars-canvas" class="parallax-layer" data-speed="0.05"></canvas>
+        <canvas id="stardust-canvas" class="parallax-layer" data-speed="0.3"></canvas>
+        
+        <div id="sun-layer" class="parallax-layer" data-speed="0.02">
+            <canvas id="sun-canvas" width="64" height="64"></canvas>
+        </div>
+        
+        <div id="earth-layer" class="parallax-layer" data-speed="0.8">
+            <canvas id="earth-canvas" width="128" height="128"></canvas>
+        </div>
+        
+        <!-- Foreground Text Overlay -->
+        <div id="poem-container"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
