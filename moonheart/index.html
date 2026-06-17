@@ -41,6 +41,9 @@ import * as THREE from 'three';
 /* ============================================================
    CONFIG — tweak everything here
    ============================================================ */
+// touch devices have no hover, so make the press deeper & wider there
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+
 const CONFIG = {
   // Heart field
   hexSpacing:     0.072,   // grid spacing between prisms (smaller = denser)
@@ -62,8 +65,8 @@ const CONFIG = {
   breathSpeed:    1.1,
 
   // Interaction
-  hoverRadius:    0.42,    // local radius of the depression
-  hoverDepth:     0.80,    // fraction of length removed at cursor center
+  hoverRadius:    IS_TOUCH ? 0.52 : 0.44,   // local radius of the depression
+  hoverDepth:     IS_TOUCH ? 1.15 : 0.95,   // fraction of length removed at cursor center
   hoverEase:      0.14,    // smoothing toward target length (0..1 per frame)
   hoverFadeIn:    0.12,    // how fast hover strength ramps in
   hoverFadeOut:   0.07,    // how fast it eases out
