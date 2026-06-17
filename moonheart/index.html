@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Moon Heart</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(circle at 50% 38%, #20355f 0%, #132247 38%, #0a1430 68%, #060b1c 100%);
+    font-family: system-ui, -apple-system, sans-serif;
+    touch-action: none;
+  }
+  #scene { display: block; width: 100%; height: 100%; }
+  .hint {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    color: rgba(200, 220, 255, 0.45); font-size: 12px; letter-spacing: 0.18em;
+    text-transform: uppercase; pointer-events: none; user-select: none;
+    transition: opacity 1.2s ease; opacity: 1;
+  }
+  .hint.hidden { opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="hint" id="hint">Move to touch the surface</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   CONFIG — tweak everything here
+   ============================================================ */
+const CONFIG = {
+  // Heart field
+  hexSpacing:     0.072,   // grid spacing between prisms (smaller = denser)
+  heartScale:     0.92,    // overall size of the heart silhouette
+  domeDepth:      0.52,    // how puffy the 3D dome is
+  radialCenter:   new THREE.Vector3(0, -0.05, -1.05), // prisms point away from here
+
+  // Prism dimensions (length = the "spike" outward)
+  lenCenter:      0.20,    // prism length near front/center
+  lenEdge:        0.05,    // prism length near outer edges
+  hexWidthCenter: 0.058,   // hex radius near center (larger)
+  hexWidthEdge:   0.034,   // hex radius near edges (smaller)
+
+  // Motion
+  rotSpeed:       0.16,    // idle Y rotation (rad/s)
+  floatAmp:       0.07,    // vertical bob amplitude
+  floatSpeed:     0.5,
+  breathAmp:      0.022,   // per-prism breathing length
+  breathSpeed:    1.1,
+
+  // Interaction
+  hoverRadius:    0.42,    // local radius of the depression
+  hoverDepth:     0.80,    // fraction of length removed at cursor center
+  hoverEase:      0.14,    // smoothing toward target length (0..1 per frame)
+  hoverFadeIn:    0.12,    // how fast hover strength ramps in
+  hoverFadeOut:   0.07,    // how fast it eases out
+
+  // Color (blue/white, desaturated rubber)
+  hueBase:        0.60,
+  satBase:        0.32,
+  lightMin:       0.34,
+  lightMax:       0.90,
+};
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0a1430, 4.2, 8.5);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+camera.position.set(0, 0.15, 3.7);
+camera.lookAt(0, 0, 0);
+
+/* ============================================================
+   LIGHTING — soft, premium, ambient-occlusion feel
+   ============================================================ */
+function setupLights() {
+  scene.add(new THREE.AmbientLight(0x6a82c0, 0.55));
+
+  const key = new THREE.DirectionalLight(0xffffff, 1.15);
+  key.position.set(-2.2, 3.0, 2.6);
+  scene.add(key);
+
+  const rim = new THREE.DirectionalLight(0x4a6cff, 0.7);
+  rim.position.set(2.6, -1.0, -2.0);
+  scene.add(rim);
+
+  const fill = new THREE.PointLight(0x9fc0ff, 0.5, 12);
+  fill.position.set(1.5, 1.2, 2.5);
+  scene.add(fill);
+
+  // soft back fill so the rear shell stays legible as it rotates
+  const back = new THREE.DirectionalLight(0x8aa6e8, 0.55);
+  back.position.set(-1.4, 1.6, -2.6);
+  scene.add(back);
+}
+setupLights();
+
+/* ============================================================
+   HEART FIELD — instanced hexagonal prisms
+   ============================================================ */
+const group = new THREE.Group();
+group.rotation.x = -0.12;
+scene.add(group);
+
+// 2D heart implicit: inside when f < 0  (lobes up, cusp down)
+function insideHeart(x, y) {
+  const a = x * x + y * y - 1.0;
+  return a * a * a - x * x * y * y * y < 0.0;
+}
+
+// approximate distance from a point to the heart's edge (in heart-space).
+// march outward in many directions, take the nearest exit — this is what
+// drives the dome height so both shells fall to z=0 all along the rim.
+function edgeDistance(hx, hy) {
+  const dirs = 24, step = 0.02, maxR = 1.6;
+  let minD = maxR;
+  for (let a = 0; a < dirs; a++) {
+    const ang = (a / dirs) * Math.PI * 2;
+    const cx = Math.cos(ang), cy = Math.sin(ang);
+    for (let r = step; r < minD; r += step) {
+      if (!insideHeart(hx + cx * r, hy + cy * r)) { minD = r; break; }
+    }
+  }
+  return minD;
+}
+
+/* --- value-noise based "lunar surface" shading ------------------- */
+function hash(x, y) {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+function smooth01(t) { return t * t * (3 - 2 * t); }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = smooth01(xf), v = smooth01(yf);
+  const a = hash(xi, yi),     b = hash(xi + 1, yi);
+  const c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  return THREE.MathUtils.lerp(
+    THREE.MathUtils.lerp(a, b, u),
+    THREE.MathUtils.lerp(c, d, u), v);
+}
+function fbm(x, y) {
+  let s = 0, amp = 0.5, freq = 1;
+  for (let o = 0; o < 4; o++) { s += amp * vnoise(x * freq, y * freq); freq *= 2; amp *= 0.5; }
+  return s;
+}
+
+// dark "maria" blotches and bright ray-craters, placed for a moon-like read
+const MARIA = [
+  { x: -0.32, y: 0.52, r: 0.58, depth: 0.30 },
+  { x:  0.46, y: 0.30, r: 0.50, depth: 0.26 },
+  { x: -0.08, y:-0.05, r: 0.62, depth: 0.24 },
+  { x:  0.55, y: 0.72, r: 0.34, depth: 0.22 },
+  { x: -0.55, y:-0.20, r: 0.40, depth: 0.20 },
+];
+const CRATERS = [
+  { x: -0.56, y: 0.18, r: 0.20, bright: 0.40 },
+  { x:  0.22, y: 0.56, r: 0.13, bright: 0.34 },
+  { x:  0.02, y: 0.02, r: 0.16, bright: 0.30 },
+  { x:  0.60, y:-0.04, r: 0.15, bright: 0.34 },
+  { x: -0.26, y:-0.34, r: 0.17, bright: 0.30 },
+  { x:  0.40, y:-0.28, r: 0.11, bright: 0.30 },
+];
+
+// lightness 0..1 for a point on the heart; sign offsets the two faces
+function surfaceShade(hx, hy, sign) {
+  const off = sign > 0 ? 0 : 41.3;
+  const n = fbm(hx * 2.3 + 5 + off, hy * 2.3 + 5 + off);   // ~0..1, patchy
+  let L = 0.44 + (n - 0.5) * 0.72;                          // spread around mid
+  for (const m of MARIA) {
+    const dd = Math.hypot(hx - m.x, hy - m.y);
+    if (dd < m.r) L -= m.depth * smooth01(1 - dd / m.r);
+  }
+  for (const c of CRATERS) {
+    const dd = Math.hypot(hx - c.x, hy - c.y);
+    if (dd < c.r) L += c.bright * smooth01(1 - dd / c.r);
+  }
+  return THREE.MathUtils.clamp(L, 0.16, 0.95);
+}
+
+// Build instance data on a hex grid clipped to the heart shape
+function buildField() {
+  const s = CONFIG.hexSpacing;
+  const rowH = s * Math.sqrt(3) / 2;
+  const half = 1.6;
+
+  const basePos = [];
+  const normals = [];
+  const quats   = [];
+  const baseLen = [];
+  const hexW    = [];
+  const phase   = [];
+  const colors  = [];
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const tmpQ = new THREE.Quaternion();
+  let row = 0;
+
+  // two shells: front (+z) and back (-z), each pointing outward
+  const frontCenter = CONFIG.radialCenter;
+  const backCenter = new THREE.Vector3(
+    -CONFIG.radialCenter.x, CONFIG.radialCenter.y, -CONFIG.radialCenter.z);
+
+  // emit one prism for a face. sign: +1 front, -1 back
+  function addFace(px, py, zDome, len, w, sign, center, shx, hy) {
+    const pos = new THREE.Vector3(px, py, zDome * sign);
+    const nrm = pos.clone().sub(center).normalize();
+    tmpQ.setFromUnitVectors(up, nrm);
+    basePos.push(pos);
+    normals.push(nrm);
+    quats.push(tmpQ.clone());
+    baseLen.push(len);
+    hexW.push(w);
+    phase.push(Math.random() * Math.PI * 2);
+
+    const L = surfaceShade(shx, hy, sign);
+    // darker = more saturated blue, lighter = whiter
+    const sat = THREE.MathUtils.lerp(0.46, 0.12, (L - 0.16) / 0.79);
+    colors.push(new THREE.Color().setHSL(CONFIG.hueBase, sat, L));
+  }
+
+  // pass 1: collect interior cells + their distance to the heart edge
+  const cells = [];
+  let maxEdge = 1e-6;
+  for (let y = -half; y <= half; y += rowH, row++) {
+    const xOff = (row % 2) * (s / 2);
+    for (let x = -half + xOff; x <= half; x += s) {
+      const hx = x / 1.18;
+      const hy = (y + 0.25) / 1.18;   // lift so heart centers nicely
+      if (!insideHeart(hx, hy)) continue;
+      const ed = edgeDistance(hx, hy);
+      if (ed > maxEdge) maxEdge = ed;
+      cells.push({ px: x * CONFIG.heartScale, py: y * CONFIG.heartScale, hx, hy, ed });
+    }
+  }
+
+  // pass 2: dome height & size driven by edge distance, so z -> 0 all
+  // around the rim and the front/back shells weld together everywhere.
+  const tRim = 0.12;   // outer band pinned to z=0 so both shells share the rim
+  for (const c of cells) {
+    const t = c.ed / maxEdge;                     // 0 at edge, 1 deepest inside
+    // remap so the rim band stays flat (welded) then bulges inward
+    const dt = Math.max(0, (t - tRim) / (1 - tRim));
+    const dome = Math.sqrt(Math.max(0, dt * (2 - dt)));  // rounded cushion profile
+    const zDome = CONFIG.domeDepth * dome;
+
+    const k = t;                                  // bigger/longer toward center
+    const len = THREE.MathUtils.lerp(CONFIG.lenEdge, CONFIG.lenCenter, k);
+    const w   = THREE.MathUtils.lerp(CONFIG.hexWidthEdge, CONFIG.hexWidthCenter, k);
+
+    addFace(c.px, c.py, zDome, len, w,  1, frontCenter,  c.hx, c.hy);
+    addFace(c.px, c.py, zDome, len, w, -1, backCenter,  -c.hx, c.hy);
+  }
+
+  return { basePos, normals, quats, baseLen, hexW, phase, colors, count: basePos.length };
+}
+
+const field = buildField();
+
+// Hexagonal prism geometry (6-sided cylinder), oriented along Y.
+// Translate so the prism base sits at the origin and grows along +Y.
+const prismGeo = new THREE.CylinderGeometry(1, 0.92, 1, 6, 1);
+prismGeo.translate(0, 0.5, 0); // base at y=0, tip at y=1
+
+const prismMat = new THREE.MeshStandardMaterial({
+  roughness: 0.78,   // rubbery
+  metalness: 0.06,
+  flatShading: true,
+});
+
+const mesh = new THREE.InstancedMesh(prismGeo, prismMat, field.count);
+mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+mesh.frustumCulled = false;
+group.add(mesh);
+
+// apply per-instance colors
+for (let i = 0; i < field.count; i++) {
+  mesh.setColorAt(i, field.colors[i]);
+}
+mesh.instanceColor.needsUpdate = true;
+
+// per-instance live length (eased)
+const curLen = new Float32Array(field.count);
+for (let i = 0; i < field.count; i++) curLen[i] = field.baseLen[i];
+
+/* ============================================================
+   SOFT BLURRED SHADOW underneath
+   ============================================================ */
+function makeShadow() {
+  const size = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  g.addColorStop(0.0, 'rgba(2, 6, 20, 0.55)');
+  g.addColorStop(0.45, 'rgba(2, 6, 20, 0.30)');
+  g.addColorStop(1.0, 'rgba(2, 6, 20, 0.0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(cv);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthWrite: false,
+  });
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 4.4), mat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(0, -1.55, 0);
+  scene.add(plane);
+  return plane;
+}
+makeShadow();
+
+/* ============================================================
+   POINTER / HOVER
+   ============================================================ */
+const pointer = new THREE.Vector2(0, 0);
+let pointerActive = false;
+const raycaster = new THREE.Raycaster();
+const cursorLocal = new THREE.Vector3();
+let hoverStrength = 0; // 0..1 eased
+
+function onMove(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  pointer.x = ((clientX - r.left) / r.width) * 2 - 1;
+  pointer.y = -((clientY - r.top) / r.height) * 2 + 1;
+  pointerActive = true;
+  hideHint();
+}
+window.addEventListener('pointermove', (e) => onMove(e.clientX, e.clientY));
+window.addEventListener('pointerleave', () => { pointerActive = false; });
+window.addEventListener('pointerdown', (e) => onMove(e.clientX, e.clientY));
+
+const hintEl = document.getElementById('hint');
+let hintHidden = false;
+function hideHint() {
+  if (hintHidden) return;
+  hintHidden = true;
+  hintEl.classList.add('hidden');
+}
+
+/* ============================================================
+   ANIMATION
+   ============================================================ */
+const dummy = new THREE.Object3D();
+const clock = new THREE.Clock();
+const tmpVec = new THREE.Vector3();
+
+function frame() {
+  const t = clock.getElapsedTime();
+
+  // idle motion
+  group.rotation.y = t * CONFIG.rotSpeed;
+  group.position.y = Math.sin(t * CONFIG.floatSpeed) * CONFIG.floatAmp;
+
+  // hover raycast (in current rotated space) -> local cursor point
+  let hovering = false;
+  if (pointerActive) {
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObject(mesh, false)[0];
+    if (hit) {
+      hovering = true;
+      cursorLocal.copy(hit.point);
+      group.worldToLocal(cursorLocal);
+    }
+  }
+  // ease hover strength in/out
+  const targetStrength = hovering ? 1 : 0;
+  const rate = hovering ? CONFIG.hoverFadeIn : CONFIG.hoverFadeOut;
+  hoverStrength += (targetStrength - hoverStrength) * rate;
+
+  const R = CONFIG.hoverRadius;
+  const useHover = hoverStrength > 0.001;
+
+  for (let i = 0; i < field.count; i++) {
+    const base = field.baseLen[i];
+
+    // depression falloff based on distance to cursor (in local space)
+    let depress = 0;
+    if (useHover) {
+      const dist = tmpVec.copy(field.basePos[i]).distanceTo(cursorLocal);
+      if (dist < R) {
+        const f = 1 - dist / R;                  // 1 center -> 0 edge
+        const soft = f * f * (3 - 2 * f);        // smoothstep
+        depress = soft * CONFIG.hoverDepth * hoverStrength;
+      }
+    }
+
+    const target = base * (1 - depress);
+    curLen[i] += (target - curLen[i]) * CONFIG.hoverEase;
+
+    // breathing on top
+    const breath = Math.sin(t * CONFIG.breathSpeed + field.phase[i]) * CONFIG.breathAmp;
+    const len = Math.max(0.012, curLen[i] + breath);
+
+    const w = field.hexW[i];
+    dummy.position.copy(field.basePos[i]);
+    dummy.quaternion.copy(field.quats[i]);
+    dummy.scale.set(w, len, w);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   RESIZE / START
+   ============================================================ */
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const portrait = h > w;
+  camera.position.z = portrait ? 5.4 : 4.0;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
