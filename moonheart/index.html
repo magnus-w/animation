@@ -434,7 +434,7 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   const portrait = h > w;
-  camera.position.z = portrait ? 5.4 : 4.0;
+  camera.position.z = portrait ? 6.2 : 4.4;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
